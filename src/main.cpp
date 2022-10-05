@@ -10,8 +10,8 @@
 // ---- START VEXCODE CONFIGURED DEVICES ----
 // Robot Configuration:
 // [Name]               [Type]        [Port(s)]
-// LeftMotor            motor         1               
-// RightMotor           motor         10              
+// LeftMotor            motor         10              
+// RightMotor           motor         1               
 // Controller1          controller                    
 // StrafeMotor          motor         2               
 // ArmMotor             motor         12              
@@ -20,29 +20,21 @@
 // ---- END VEXCODE CONFIGURED DEVICES ----
 
 #include "vex.h"
+#include <iostream>
 
 using namespace vex;
+using namespace std;
 
 // A global instance of competition
 competition Competition;
 
 // define your global instances of motors and other devices here
 
-//custom motor wrappers
-Motor leftMotor(LeftMotor, DRIVE_MOTOR_SETTINGS);
-Motor rightMotor(RightMotor, DRIVE_MOTOR_SETTINGS);
-Motor strafeMotor(StrafeMotor, DRIVE_MOTOR_SETTINGS);
-Motor armMotor(ArmMotor, INTAKE_MOTOR_SETTINGS);
-Motor lowerIntakeMotor(LowerIntakeMotor, INTAKE_MOTOR_SETTINGS);
-Motor upperIntakeMotor(UpperIntakeMotor, INTAKE_MOTOR_SETTINGS);
-
-//h-drive wrapper
-HDrive hdrive(leftMotor, rightMotor, strafeMotor);
 //constants
 double MAX_VELOCITY_SLOW = 12; // in/s
 double MAX_VELOCITY_FAST = 24; // in/s
 double MAX_OMEGA_SLOW = .5;
-double MAX_OMEGA_FAST = 5;
+double MAX_OMEGA_FAST = 1;
 
 /*---------------------------------------------------------------------------*/
 /*                          Pre-Autonomous Functions                         */
@@ -57,7 +49,13 @@ double MAX_OMEGA_FAST = 5;
 void pre_auton(void) {
   // Initializing Robot Configuration. DO NOT REMOVE!
   vexcodeInit();
+  StrafeMotor.setStopping(brakeType::hold);
+  LeftMotor.setStopping(brakeType::hold);
+  RightMotor.setStopping(brakeType::hold);
+  ArmMotor.setStopping(brakeType::hold);
 
+  //hit the arm of the hard stop
+  ArmMotor.spinToPosition(1, rotationUnits::rev, 45.5, velocityUnits::rpm, true);
   // All activities that occur before the competition starts
   // Example: clearing encoders, setting servo positions, ...
 }
@@ -73,6 +71,7 @@ void pre_auton(void) {
 /*---------------------------------------------------------------------------*/
 
 void autonomous(void) {
+  cout << "Auto" << endl;
   // ..........................................................................
   // Insert autonomous user code here.
   // ..........................................................................
@@ -89,6 +88,7 @@ void autonomous(void) {
 /*---------------------------------------------------------------------------*/
 
 void usercontrol(void) {
+  cout << "Teleop" << endl;
   // User control code here, inside the loop
 
   // Controller Control Scheme:
@@ -102,6 +102,26 @@ void usercontrol(void) {
   // TODO L2, intake (continuous)
   // TODO L1, outtake (continuous)
   // TODO R2, drive fast (continuous)
+  HDrive hdrive(LeftMotor, RightMotor, StrafeMotor);
+
+  Controller1.ButtonX.pressed([] () {
+    ArmMotor.stop();
+    ArmMotor.spinToPosition(3.1, rotationUnits::rev, 45.5, velocityUnits::rpm);
+  });
+  Controller1.ButtonA.pressed([] () {
+    ArmMotor.stop();
+    ArmMotor.spinToPosition(1, rotationUnits::rev, 45.5, velocityUnits::rpm);
+  });
+  Controller1.ButtonB.pressed([] () {
+    ArmMotor.stop();
+    ArmMotor.spinToPosition(.5, rotationUnits::rev, 45.5, velocityUnits::rpm);
+  });
+  Controller1.ButtonY.pressed([] () {
+    ArmMotor.stop();
+    cout << "Arm Motor Stopped (Pos: " << ArmMotor.position(rotationUnits::rev) << ")" << endl;
+  });
+  bool manualArm = false;
+
   while (1) {
     // This is the main execution loop for the user control program.
     // Each time through the loop your program should update motor + servo
@@ -109,31 +129,38 @@ void usercontrol(void) {
 
     /* Intake Code */
     if (Controller1.ButtonL2.pressing()) {
-      lowerIntakeMotor.drive(200);
-      upperIntakeMotor.drive(200);
+      cout << "INTAKEE" << endl;
+      LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
+      UpperIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
     } else if (Controller1.ButtonL1.pressing()) {
-      lowerIntakeMotor.drive(200);
-      upperIntakeMotor.drive(-200);
+      LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
+      UpperIntakeMotor.spin(directionType::fwd, -200, velocityUnits::rpm);
     } else {
-      lowerIntakeMotor.drive(0);
-      upperIntakeMotor.drive(0);
+      LowerIntakeMotor.stop();
+      UpperIntakeMotor.stop();
     }
 
+    /* Lift Code */
+    if (Controller1.ButtonY.pressing()) {
+      cout << "MANUAL ARM!" << endl;
+      manualArm = true;
+      ArmMotor.spin(directionType::fwd, Controller1.Axis2.value() / 127 * 45.5, velocityUnits::rpm);
+      continue; //no driving
+    } else if (manualArm) {
+      ArmMotor.stop();
+      manualArm = false;
+    }
     /* Drive Code */
     double v_max = Controller1.ButtonR2.pressing() ? MAX_VELOCITY_FAST : MAX_VELOCITY_SLOW;
     double omega_max = Controller1.ButtonR2.pressing() ? MAX_OMEGA_FAST : MAX_OMEGA_SLOW;
+    
+    hdrive.setDriveVelocities(Controller1.Axis3.value() * v_max / 127, // v_x
+                              Controller1.Axis4.value() * v_max / 127, // v_y
+                              Controller1.Axis1.value() * omega_max / 127); // omega
 
-    hdrive.setDriveVelocities(Controller1.Axis3.position(percent) * v_max / 100, // v_x
-                              Controller1.Axis4.position(percent) * v_max / 100, // v_y
-                              Controller1.Axis1.position(percent) * omega_max / 100); // omega
-
-    /* call loop functions */
-    hdrive.loop();
-    lowerIntakeMotor.loop();
-    upperIntakeMotor.loop();
-
-    wait(20, msec); // Sleep the task for a short amount of time to
+    wait(100, msec); // Sleep the task for a short amount of time to
                     // prevent wasted resources.
+
   }
 }
 
