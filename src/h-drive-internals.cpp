@@ -37,14 +37,14 @@ void HDrive::setDriveVelocities(double v_x, double v_y, double omega) {
   double v_l = v_x_last + v_rot; //in/s
 
   
-  m_left->spin(directionType::fwd, v_l * 60 / (M_PI * WHEEL_DIAMETER), velocityUnits::rpm);
-  m_right->spin(directionType::fwd, v_r * 60 / (M_PI * WHEEL_DIAMETER), velocityUnits::rpm);
+  m_left->spin(directionType::fwd, v_l * 60 / (M_PI * WHEEL_DIAMETER) * 5, velocityUnits::rpm);
+  m_right->spin(directionType::fwd, v_r * 60 / (M_PI * WHEEL_DIAMETER) * 5, velocityUnits::rpm);
   m_strafe->spin(directionType::fwd, v_y * 60 / (M_PI * WHEEL_DIAMETER), velocityUnits::rpm);
 }
 
 //all velocities in/s
 void HDrive::setWheelVelocities(double v_l, double v_r, double v_s) {
-  m_left->spin(directionType::fwd, v_l * 60 / (M_PI * WHEEL_DIAMETER), velocityUnits::rpm);
-  m_right->spin(directionType::fwd, v_r * 60 / (M_PI * WHEEL_DIAMETER), velocityUnits::rpm);
-  m_strafe->spin(directionType::fwd, v_s * 60 / (M_PI * WHEEL_DIAMETER), velocityUnits::rpm);
+  m_left->spin(directionType::fwd, v_l * 60 / (M_PI * WHEEL_DIAMETER) * 5, velocityUnits::rpm);
+  m_right->spin(directionType::fwd, v_r * 60 / (M_PI * WHEEL_DIAMETER) * 5, velocityUnits::rpm);
+  m_strafe->spin(directionType::fwd, v_s * 60 / (M_PI * WHEEL_DIAMETER) * 5, velocityUnits::rpm);
 }
