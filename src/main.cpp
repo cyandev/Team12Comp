@@ -14,13 +14,18 @@
 // RightMotor           motor         1               
 // Controller1          controller                    
 // StrafeMotor          motor         2               
-// ArmMotor             motor         12              
 // LowerIntakeMotor     motor         3               
 // UpperIntakeMotor     motor         4               
+// ArmMotors            motor_group   11, 12          
+// RangeFinder          sonar         A, B            
+// RightLineTracker     line          C               
+// LeftLineTracker      line          D               
 // ---- END VEXCODE CONFIGURED DEVICES ----
 
 #include "vex.h"
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 
 using namespace vex;
 using namespace std;
@@ -35,6 +40,83 @@ double MAX_VELOCITY_SLOW = 12; // in/s
 double MAX_VELOCITY_FAST = 24; // in/s
 double MAX_OMEGA_SLOW = .5;
 double MAX_OMEGA_FAST = 1;
+
+void driveIntoWall(double velocity) { //rpm
+  //drive into the wall at velocity until velocity drops below velocity
+  LeftMotor.spin(directionType::fwd, velocity, velocityUnits::rpm);
+  RightMotor.spin(directionType::fwd, velocity, velocityUnits::rpm);
+  wait(500, msec);
+
+  while (LeftMotor.velocity(velocityUnits::rpm) > velocity / 4) {
+    wait(100, msec);
+  }
+
+  LeftMotor.stop();
+  RightMotor.stop();
+}
+
+void lineSquare(double vtowards, double vaway) {
+  LeftMotor.setStopping(coast);
+  RightMotor.setStopping(coast);
+  bool leftDone = false;
+  bool rightDone = false;
+  LeftMotor.spin(directionType::fwd, vtowards, velocityUnits::rpm);
+  RightMotor.spin(directionType::fwd, vtowards, velocityUnits::rpm);
+  cout << "waiting for towards..." << endl;
+  cout << "left: " << LeftLineTracker.reflectivity(percentUnits::pct) << ", right: " << RightLineTracker.reflectivity(percentUnits::pct) << endl;
+  while (!(leftDone && rightDone)) {
+    cout << "left: " << LeftLineTracker.reflectivity(percentUnits::pct) << ", right: " << RightLineTracker.reflectivity(percentUnits::pct) << endl;
+    if (RightLineTracker.reflectivity(percentUnits::pct) > 20) {
+      rightDone = true;
+      RightMotor.stop();
+    }
+    if (LeftLineTracker.reflectivity(percentUnits::pct) > 20) {
+      leftDone = true;
+      LeftMotor.stop();
+    }
+    wait(20, msec);
+  }
+  
+  //go back
+  cout << "waiting for away..." << endl;
+  LeftMotor.spin(directionType::fwd, vaway, velocityUnits::rpm);
+  RightMotor.spin(directionType::fwd, vaway, velocityUnits::rpm);
+  while (!leftDone && !rightDone) {
+    if (RightLineTracker.reflectivity(percentUnits::pct) < 15) {
+      rightDone = true;
+      RightMotor.stop();
+    }
+    if (LeftLineTracker.reflectivity(percentUnits::pct) < 15) {
+      leftDone = true;
+      LeftMotor.stop();
+    }
+    wait(20, msec);
+  }
+  cout << "done" << endl;
+
+  LeftMotor.setStopping(brake);
+  RightMotor.setStopping(brake);
+}
+
+void pidDistance(double dist, double p, double ff) {
+  double rangeDist = RangeFinder.distance(distanceUnits::cm);
+  cout << "dist: " << rangeDist << ", err: " << abs(rangeDist - dist) << endl;
+  int succ = 0; //# of successe
+  while ( succ < 4) {
+    if (abs(rangeDist - dist) > 2.5) {
+      succ = 0;
+    } else {
+      succ++;
+    }
+    cout << "dist: " << rangeDist << ", err: " << abs(rangeDist - dist) << endl;
+    double err = rangeDist - dist;
+    StrafeMotor.spin(directionType::rev, err*p, velocityUnits::rpm);
+    wait(20, msec);
+    rangeDist = RangeFinder.distance(distanceUnits::cm);
+  }
+  cout << "PID done, dist: " << rangeDist << endl;
+  StrafeMotor.stop();
+}
 
 /*---------------------------------------------------------------------------*/
 /*                          Pre-Autonomous Functions                         */
@@ -52,10 +134,25 @@ void pre_auton(void) {
   StrafeMotor.setStopping(brakeType::hold);
   LeftMotor.setStopping(brakeType::hold);
   RightMotor.setStopping(brakeType::hold);
-  ArmMotor.setStopping(brakeType::hold);
+  ArmMotors.setStopping(brakeType::hold);
+  UpperIntakeMotor.setStopping(brakeType::hold);
+  
+  //prevent burnout on drive
+  LeftMotor.setMaxTorque(90, percentUnits::pct);
+  RightMotor.setMaxTorque(90, percentUnits::pct);
+  StrafeMotor.setMaxTorque(90, percentUnits::pct);
+  LeftMotor.setTimeout(3, timeUnits::sec);
+  RightMotor.setTimeout(3, timeUnits::sec);
+  StrafeMotor.setTimeout(3, timeUnits::sec);
 
-  //hit the arm of the hard stop
-  ArmMotor.spinToPosition(1, rotationUnits::rev, 45.5, velocityUnits::rpm, true);
+
+  ArmMotors.spin(directionType::fwd, -20, velocityUnits::rpm); //hit motors into hard stop
+  wait(1000, msec);
+  ArmMotors.resetRotation();
+  ArmMotors.spinToPosition(0.4, rotationUnits::rev, 45.5, velocityUnits::rpm);
+
+  
+
   // All activities that occur before the competition starts
   // Example: clearing encoders, setting servo positions, ...
 }
@@ -105,21 +202,22 @@ void usercontrol(void) {
   HDrive hdrive(LeftMotor, RightMotor, StrafeMotor);
 
   Controller1.ButtonX.pressed([] () {
-    ArmMotor.stop();
-    ArmMotor.spinToPosition(3.1, rotationUnits::rev, 45.5, velocityUnits::rpm);
+    ArmMotors.stop();
+    ArmMotors.spinToPosition(3.3, rotationUnits::rev, 80, velocityUnits::rpm);
   });
   Controller1.ButtonA.pressed([] () {
-    ArmMotor.stop();
-    ArmMotor.spinToPosition(1, rotationUnits::rev, 45.5, velocityUnits::rpm);
+    ArmMotors.stop();
+    ArmMotors.spinToPosition(1.9, rotationUnits::rev, 80, velocityUnits::rpm);
   });
   Controller1.ButtonB.pressed([] () {
-    ArmMotor.stop();
-    ArmMotor.spinToPosition(.5, rotationUnits::rev, 45.5, velocityUnits::rpm);
+    ArmMotors.stop();
+    ArmMotors.spinToPosition(0.3, rotationUnits::rev, 80, velocityUnits::rpm);
   });
   Controller1.ButtonY.pressed([] () {
-    ArmMotor.stop();
-    cout << "Arm Motor Stopped (Pos: " << ArmMotor.position(rotationUnits::rev) << ")" << endl;
+    ArmMotors.stop();
+    cout << "Arm Motor Stopped (Pos: " << ArmMotors.position(rotationUnits::rev) << ")" << endl;
   });
+
   bool manualArm = false;
 
   while (1) {
@@ -127,28 +225,114 @@ void usercontrol(void) {
     // Each time through the loop your program should update motor + servo
     // values based on feedback from the joysticks.
 
+    /* testing */
+
+    if (Controller1.ButtonLeft.pressing()) {
+      pidDistance(100, -5, 20);
+    }
+
+    if (Controller1.ButtonDown.pressing()) {
+      ArmMotors.spinToPosition(.4, rotationUnits::rev, 50, velocityUnits::rpm, true);
+      LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
+      UpperIntakeMotor.spinToPosition(0, rotationUnits::deg, 180, velocityUnits::rpm, false);
+      driveIntoWall(80);
+      wait(200,msec);
+      ArmMotors.spinToPosition(.5, rotationUnits::rev, 50, velocityUnits::rpm, true);
+      //back + strafe
+      LeftMotor.spinFor(fwd, -300, rotationUnits::deg, 80, velocityUnits::rpm, false);
+      StrafeMotor.spinFor(fwd, -100, rotationUnits::deg, 80, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, -300, rotationUnits::deg, 80, velocityUnits::rpm, true);
+      
+      wait(500, msec);
+      //spin + lift
+      ArmMotors.spinToPosition(3, rotationUnits::rev, 80, velocityUnits::rpm, false);
+      LeftMotor.spinFor(fwd, -280, rotationUnits::deg, 50, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, 280, rotationUnits::deg, 50, velocityUnits::rpm, true);
+
+      wait(500,msec);
+
+      //square + turn
+      lineSquare(25, -25);
+
+      wait(500,msec);
+
+      //bang + deliver
+      driveIntoWall(150);
+      wait(500, msec);
+      LeftMotor.spinFor(fwd, -100, rotationUnits::deg, 50, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, -100, rotationUnits::deg, 50, velocityUnits::rpm, true);
+      wait(500, msec);
+      pidDistance(12, -5, -20);
+      driveIntoWall(80);
+      for (int i = 0; i < 3; i++) {
+        LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
+        UpperIntakeMotor.spinToPosition(-120, rotationUnits::deg, 200, velocityUnits::rpm, false);
+        wait(400, msec);
+        LowerIntakeMotor.stop();
+        UpperIntakeMotor.spinToPosition(0, rotationUnits::deg, 200, velocityUnits::rpm, false);
+        wait(200, msec);
+      }
+
+      //strafe + back up
+      LeftMotor.spinFor(fwd, -100, rotationUnits::deg, 50, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, -100, rotationUnits::deg, 50, velocityUnits::rpm, true);
+
+      StrafeMotor.spinFor(fwd, -200, rotationUnits::deg, 50, velocityUnits::rpm, true);
+      lineSquare(-100,25);
+      lineSquare(-25,25);
+      
+      LeftMotor.spinFor(fwd, -150, rotationUnits::deg, 50, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, -150, rotationUnits::deg, 50, velocityUnits::rpm, true);
+
+      //strafe to ramp + arm down
+      RightMotor.spinFor(fwd, 25, rotationUnits::deg, 50, velocityUnits::rpm, false); //spin so that the strafe doesnt
+      LeftMotor.spinFor(fwd, -25, rotationUnits::deg, 50, velocityUnits::rpm, true);
+      
+      pidDistance(125, -5, -20);
+
+      ArmMotors.spinToPosition(0.3, rotationUnits::rev, 80, velocityUnits::rpm, true);
+
+      driveIntoWall(-80);
+
+      LeftMotor.setMaxTorque(100, percent);
+      RightMotor.setMaxTorque(100, percent);
+      LeftMotor.spin(fwd, 12, voltageUnits::volt);
+      RightMotor.spin(fwd, 12, voltageUnits::volt);
+
+      wait(6000, msec);
+
+    }
+
+
     /* Intake Code */
     if (Controller1.ButtonL2.pressing()) {
-      cout << "INTAKEE" << endl;
       LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
-      UpperIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
+      UpperIntakeMotor.spinToPosition(0, rotationUnits::deg, 200, velocityUnits::rpm, false);
     } else if (Controller1.ButtonL1.pressing()) {
       LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
-      UpperIntakeMotor.spin(directionType::fwd, -200, velocityUnits::rpm);
+      UpperIntakeMotor.spinToPosition(-120, rotationUnits::deg, 200, velocityUnits::rpm, false);
     } else {
       LowerIntakeMotor.stop();
-      UpperIntakeMotor.stop();
+      UpperIntakeMotor.spinToPosition(0, rotationUnits::deg, 200, velocityUnits::rpm, false);
     }
 
     /* Lift Code */
     if (Controller1.ButtonY.pressing()) {
-      cout << "MANUAL ARM!" << endl;
       manualArm = true;
-      ArmMotor.spin(directionType::fwd, Controller1.Axis2.value() / 127 * 45.5, velocityUnits::rpm);
+      ArmMotors.spin(directionType::fwd, Controller1.Axis2.value() / 127 * 45.5, velocityUnits::rpm);
       continue; //no driving
     } else if (manualArm) {
-      ArmMotor.stop();
+      ArmMotors.stop();
       manualArm = false;
+    }
+
+    /* Real Turbo Mode */
+    if (Controller1.ButtonR1.pressing()) {
+      LeftMotor.setMaxTorque(100, percent);
+      RightMotor.setMaxTorque(100, percent);
+      LeftMotor.spin(fwd, 12, voltageUnits::volt);
+      RightMotor.spin(fwd, 12, voltageUnits::volt);
+      continue;
     }
     /* Drive Code */
     double v_max = Controller1.ButtonR2.pressing() ? MAX_VELOCITY_FAST : MAX_VELOCITY_SLOW;
@@ -158,7 +342,7 @@ void usercontrol(void) {
                               Controller1.Axis4.value() * v_max / 127, // v_y
                               Controller1.Axis1.value() * omega_max / 127); // omega
 
-    wait(100, msec); // Sleep the task for a short amount of time to
+    wait(20, msec); // Sleep the task for a short amount of time to
                     // prevent wasted resources.
 
   }

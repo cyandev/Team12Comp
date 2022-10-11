@@ -2,9 +2,9 @@ class HDrive {
   public:
     static constexpr double ROTATION_DIAMETER = 5; //in
     static constexpr double WHEEL_DIAMETER = 4; //in
-    static constexpr double A_X = 3;
-    static constexpr double A_Y = 6;
-    static constexpr double A_OMEGA = 6;
+    static constexpr double A_X = .6;
+    static constexpr double A_Y = 1.2;
+    static constexpr double A_OMEGA = 1.2;
     HDrive(vex::motor, vex::motor, vex::motor);
     void setDriveVelocities(double, double, double);
     void setWheelVelocities(double, double, double);
