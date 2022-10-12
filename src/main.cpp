@@ -41,13 +41,13 @@ double MAX_VELOCITY_FAST = 24; // in/s
 double MAX_OMEGA_SLOW = .5;
 double MAX_OMEGA_FAST = 1;
 
-void driveIntoWall(double velocity) { //rpm
+void driveIntoWall(double velocity, double powermax) { //rpm
   //drive into the wall at velocity until velocity drops below velocity
   LeftMotor.spin(directionType::fwd, velocity, velocityUnits::rpm);
   RightMotor.spin(directionType::fwd, velocity, velocityUnits::rpm);
   wait(500, msec);
 
-  while (LeftMotor.velocity(velocityUnits::rpm) > velocity / 4) {
+  while (LeftMotor.power(powerUnits::watt) < powermax) {
     wait(100, msec);
   }
 
@@ -235,19 +235,23 @@ void usercontrol(void) {
       ArmMotors.spinToPosition(.4, rotationUnits::rev, 50, velocityUnits::rpm, true);
       LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
       UpperIntakeMotor.spinToPosition(0, rotationUnits::deg, 180, velocityUnits::rpm, false);
-      driveIntoWall(80);
-      wait(200,msec);
+      driveIntoWall(200,5);
+      
+      //square better
+      LeftMotor.spin(fwd, 200, rpm);
+      RightMotor.spin(fwd, 100, rpm);
+
+      wait(500,msec);
       ArmMotors.spinToPosition(.5, rotationUnits::rev, 50, velocityUnits::rpm, true);
       //back + strafe
       LeftMotor.spinFor(fwd, -300*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
       StrafeMotor.spinFor(fwd, -100, rotationUnits::deg, 80, velocityUnits::rpm, false);
       RightMotor.spinFor(fwd, -300*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
-      
       wait(500, msec);
       //spin + lift
       ArmMotors.spinToPosition(3, rotationUnits::rev, 80, velocityUnits::rpm, false);
-      LeftMotor.spinFor(fwd, -280*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
-      RightMotor.spinFor(fwd, 280*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
+      LeftMotor.spinFor(fwd, -260*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, 260*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
 
       wait(500,msec);
 
@@ -257,13 +261,13 @@ void usercontrol(void) {
       wait(500,msec);
 
       //bang + deliver
-      driveIntoWall(200);
+      driveIntoWall(200,5);
       wait(500, msec);
       LeftMotor.spinFor(fwd, -100*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
       RightMotor.spinFor(fwd, -100*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
       wait(500, msec);
-      pidDistance(12, -5*5, -20);
-      driveIntoWall(200);
+      pidDistance(12, -5, -20);
+      driveIntoWall(200,5);
       for (int i = 0; i < 3; i++) {
         LowerIntakeMotor.spin(directionType::fwd, 200, velocityUnits::rpm);
         UpperIntakeMotor.spinToPosition(-120, rotationUnits::deg, 200, velocityUnits::rpm, false);
@@ -274,29 +278,39 @@ void usercontrol(void) {
       }
 
       //strafe + back up
-      LeftMotor.spinFor(fwd, -100*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
-      RightMotor.spinFor(fwd, -100*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
-
+      LeftMotor.spinFor(fwd, -200*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, -200*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
       StrafeMotor.spinFor(fwd, -200, rotationUnits::deg, 50, velocityUnits::rpm, true);
       lineSquare(-200,100);
       lineSquare(-25,25);
       
-      LeftMotor.spinFor(fwd, -150*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
-      RightMotor.spinFor(fwd, -150*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
+      LeftMotor.spinFor(fwd, -250*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
+      RightMotor.spinFor(fwd, -250*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
 
       //strafe to ramp + arm down
-      pidDistance(125, -5*5, -20);
+      StrafeMotor.spin(fwd, -100, velocityUnits::rpm);
 
-      ArmMotors.spinToPosition(0.3, rotationUnits::rev, 80, velocityUnits::rpm, true);
+      while (LeftLineTracker.reflectivity(percentUnits::pct) < 20) {
+        wait(20,msec);
+      }
 
-      driveIntoWall(-80);
+      StrafeMotor.stop();
+      StrafeMotor.spinFor(fwd, -200, rotationUnits::deg, 50, velocityUnits::rpm, true);
+
+      
+      // LeftMotor.spinFor(fwd, -80*5, rotationUnits::deg, 200, velocityUnits::rpm, false);
+      // RightMotor.spinFor(fwd, 80*5, rotationUnits::deg, 200, velocityUnits::rpm, true);
+
+      ArmMotors.spinToPosition(2, rotationUnits::rev, 80, velocityUnits::rpm, true);
 
       LeftMotor.setMaxTorque(100, percent);
       RightMotor.setMaxTorque(100, percent);
       LeftMotor.spin(fwd, 12, voltageUnits::volt);
       RightMotor.spin(fwd, 12, voltageUnits::volt);
 
-      wait(20000, msec);
+      wait(2000, msec);
+      ArmMotors.spinToPosition(0.55, rotationUnits::rev, 80, velocityUnits::rpm, true);
+      wait(10000, msec);
     }
 
 
